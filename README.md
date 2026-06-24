@@ -8,3 +8,6 @@
 #2 
 fix the support module
 
+
+
+# fixing the issues of the home screen and the support screen
