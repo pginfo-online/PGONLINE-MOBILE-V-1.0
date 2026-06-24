@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "PGinfo.online",
+    "slug": "pginfo-online",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "backgroundColor": "#1e1b4b",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.pginfo.online"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1e1b4b"
+      },
+      "package": "com.pginfo.online"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#4f46e5"
+        }
+      ]
+    ]
+  }
+}
