@@ -7,7 +7,7 @@
 
 #2 
 fix the support module
-
+support ---> done
 
 
 # fixing the issues of the home screen and the support screen
