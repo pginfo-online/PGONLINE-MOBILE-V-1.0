@@ -126,7 +126,7 @@ export default function RegisterScreen({ navigation }) {
   const countdownRef = useRef(null);
 
   // Main tab
-  const [activeTab, setActiveTab] = useState(0); // 0 = Standard, 1 = Email OTP
+  const [activeTab, setActiveTab] = useState(1); // 0 = Standard, 1 = Email OTP
 
   const { setAuth } = useAuthStore();
   const insets = useSafeAreaInsets();

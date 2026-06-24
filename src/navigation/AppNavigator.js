@@ -32,7 +32,9 @@ const modalScreenOptions = {
 };
 
 export default function AppNavigator() {
-  const { isAuthenticated, hydrate, _hasHydrated } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hydrate = useAuthStore((s) => s.hydrate);
+  const _hasHydrated = useAuthStore((s) => s._hasHydrated);
 
   useEffect(() => {
     hydrate();

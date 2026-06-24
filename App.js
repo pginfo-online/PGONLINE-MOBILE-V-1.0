@@ -13,36 +13,41 @@ SplashScreen.preventAutoHideAsync();
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = React.useState(false);
   const hydrated = useAuthStore((s) => s._hasHydrated);
+  const hydrate = useAuthStore((s) => s.hydrate);
 
   useEffect(() => {
-    async function loadFonts() {
+    async function loadResources() {
       try {
-        await Font.loadAsync({
-          'Inter-Regular': require('./assets/fonts/Inter-Regular.ttf'),
-          'Inter-Medium': require('./assets/fonts/Inter-Medium.ttf'),
-          'Inter-SemiBold': require('./assets/fonts/Inter-SemiBold.ttf'),
-          'Inter-Bold': require('./assets/fonts/Inter-Bold.ttf'),
-        });
+        await Promise.all([
+          Font.loadAsync({
+            'Inter-Regular': require('./assets/fonts/Inter-Regular.ttf'),
+            'Inter-Medium': require('./assets/fonts/Inter-Medium.ttf'),
+            'Inter-SemiBold': require('./assets/fonts/Inter-SemiBold.ttf'),
+            'Inter-Bold': require('./assets/fonts/Inter-Bold.ttf'),
+          }),
+          hydrate(),
+        ]);
       } catch (e) {
-        // Fonts optional — fallback to system font
-        console.log('Fonts not loaded, using system fonts');
+        console.log('Error loading resources:', e);
+      } finally {
+        setFontsLoaded(true);
       }
-      setFontsLoaded(true);
     }
-    loadFonts();
-  }, []);
+    loadResources();
+  }, [hydrate]);
 
-  const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded) {
-      await SplashScreen.hideAsync();
+  // Robustly hide splash screen when ready
+  useEffect(() => {
+    if (fontsLoaded && hydrated) {
+      SplashScreen.hideAsync().catch(() => {});
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, hydrated]);
 
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded || !hydrated) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider onLayout={onLayoutRootView}>
+      <SafeAreaProvider>
         <StatusBar style="light" />
         <AppNavigator />
         <Toast />

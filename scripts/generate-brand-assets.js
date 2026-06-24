@@ -137,13 +137,15 @@ function makeSplash(file) {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const idx = (width * y + x) << 2;
-      png.data[idx] = 248;
-      png.data[idx + 1] = 249;
-      png.data[idx + 2] = 255;
+      // Dark theme background: #1e1b4b (30, 27, 75)
+      png.data[idx] = 30;
+      png.data[idx + 1] = 27;
+      png.data[idx + 2] = 75;
       png.data[idx + 3] = 255;
     }
   }
-  roundedRect(png, 640, 520, 768, 768, 170, mix(COLORS.primaryDark, COLORS.accent, 0.45));
+  // Center is a gorgeous rounded card with our primary indigo color
+  roundedRect(png, 640, 520, 768, 768, 170, COLORS.primary);
   const mark = createPng(768, true);
   drawMark(mark, 768 / 1024);
   for (let y = 0; y < 768; y += 1) {
