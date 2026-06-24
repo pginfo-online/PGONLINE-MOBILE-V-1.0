@@ -17,13 +17,13 @@ export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuthStore();
 
   const handleLogout = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+   // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     logout();
   };
 
   const handleShareApp = async () => {
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
       await Share.share({
         title: 'PGinfo.online',
         message: 'Find verified, premium PGs with zero brokerage and amazing amenities at PGinfo.online. Download the app today!',

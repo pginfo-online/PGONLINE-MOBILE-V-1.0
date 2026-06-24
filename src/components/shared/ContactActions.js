@@ -13,13 +13,30 @@ import colors from '../../theme/colors';
 export default function ContactActions({ phone, whatsapp, onBookVisit, style }) {
   const wp = whatsapp || phone;
 
-  const handleCall = () => {
-    const url = `tel:+91${phone}`;
-    Linking.canOpenURL(url).then((can) => {
-      if (can) Linking.openURL(url);
-      else Alert.alert('Error', 'Cannot make a call from this device');
-    });
-  };
+
+
+const handleCall = async () => {
+  try {
+    if (!phone) {
+      Alert.alert('Error', 'Phone number is not available.');
+      return;
+    }
+
+    const cleanedPhone = phone.toString().replace(/\D/g, '');
+
+    await Linking.openURL(`tel:${cleanedPhone}`);
+  } catch (error) {
+    console.error('Call Error:', error);
+
+    Alert.alert(
+      'Error',
+      'Unable to open the phone dialer.'
+    );
+  }
+};
+
+
+  
 
   const handleWhatsApp = () => {
     const url = `https://wa.me/91${wp}?text=Hi, I found your PG on PGinfo.online. I am interested in visiting.`;
