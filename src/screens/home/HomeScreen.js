@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useRef, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  RefreshControl, FlatList, Dimensions, Platform,
+  RefreshControl, FlatList, Platform,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -10,9 +10,6 @@ import Animated, {
   interpolate,
   Extrapolation,
   withSpring,
-  withTiming,
-  Easing,
-  runOnJS,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,13 +17,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import colors from '../../theme/colors';
-import spacing from '../../theme/spacing';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
 import useAuthStore from '../../store/authStore';
 import usePGStore from '../../store/pgStore';
 import useWishlistStore from '../../store/wishlistStore';
-import pgService from '../../services/pg.service';
-import leadService from '../../services/lead.service';
+import { pgService } from '../../services/pg.service';
+import { leadService } from '../../services/lead.service';
 
 import { PGCard } from '../../components/ui/Card';
 import { PGCardSkeleton } from '../../components/ui/Skeleton';
@@ -37,14 +34,60 @@ import FilterSheet from '../../components/shared/FilterSheet';
 import MeetupsCarousel from '../../components/shared/MeetupsCarousel';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const CITIES = ['Pune', 'Mumbai', 'Delhi'];
-const HEADER_MAX_HEIGHT = 140;
-const HEADER_MIN_HEIGHT = 55;
+const HEADER_MAX_HEIGHT = 164;
+const HEADER_MIN_HEIGHT = 82;
 const HEADER_SCROLL_DISTANCE = HEADER_MAX_HEIGHT - HEADER_MIN_HEIGHT;
-const SEARCH_BAR_COLLAPSE_START = 30;
-const SEARCH_BAR_COLLAPSE_END = 100;
+const SEARCH_BAR_COLLAPSE_START = 24;
+const SEARCH_BAR_COLLAPSE_END = 86;
+
+const PGListCard = React.memo(function PGListCard({ pg, isFavorite, onPress, onWishlistPress }) {
+  return (
+    <PGCard
+      pg={pg}
+      onPress={onPress}
+      style={styles.pgCardSpacing}
+      rightAction={
+        <WishlistButton
+          isWishlisted={isFavorite}
+          onPress={onWishlistPress}
+        />
+      }
+    />
+  );
+});
+
+const CitySelector = React.memo(function CitySelector({ selectedCity, onSelectCity, animatedStyle }) {
+  return (
+    <Animated.View style={[styles.citySelectorWrap, animatedStyle]}>
+      <Animated.ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.cityScroll}
+      >
+        {CITIES.map((city) => {
+          const isActive = selectedCity === city;
+          return (
+            <TouchableOpacity
+              key={city}
+              style={[styles.cityChip, isActive && styles.cityChipActive]}
+              onPress={() => onSelectCity(city)}
+              activeOpacity={0.78}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={`Show listings in ${city}`}
+            >
+              <Text style={[styles.cityText, isActive && styles.cityTextActive]}>
+                {city}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </Animated.ScrollView>
+    </Animated.View>
+  );
+});
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -52,10 +95,11 @@ export default function HomeScreen({ navigation }) {
   const { pgs, setPGs, filters, setFilters, clearFilters } = usePGStore();
   const { wishlist, isWishlisted, addToWishlist, removeFromWishlist, setWishlist } = useWishlistStore();
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => pgs.length === 0);
   const [refreshing, setRefreshing] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [selectedCity, setSelectedCity] = useState(CITIES[0]);
+  const hasLoadedOnceRef = useRef(pgs.length > 0);
 
   // ─── Animated Values ──────────────────────────────────────────────
   const scrollY = useSharedValue(0);
@@ -68,9 +112,10 @@ export default function HomeScreen({ navigation }) {
   });
 
   // ─── Data Loading ─────────────────────────────────────────────────
-  const loadData = async (isRefresh = false) => {
-    if (!isRefresh) setLoading(true);
-    else setRefreshing(true);
+  const loadData = useCallback(async (isRefresh = false) => {
+    const shouldBlockScreen = !isRefresh && !hasLoadedOnceRef.current;
+    if (shouldBlockScreen) setLoading(true);
+    if (isRefresh) setRefreshing(true);
 
     try {
       const pgData = await pgService.getAll({ ...filters, city: selectedCity, limit: 10 });
@@ -83,23 +128,24 @@ export default function HomeScreen({ navigation }) {
     } catch (err) {
       console.error(err);
     } finally {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [filters, selectedCity, setPGs, setWishlist]);
 
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [selectedCity, filters])
+    }, [loadData])
   );
 
   const handleRefresh = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     loadData(true);
-  }, [selectedCity, filters]);
+  }, [loadData]);
 
-  const toggleWishlist = async (pgId) => {
+  const toggleWishlist = useCallback(async (pgId) => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       if (isWishlisted(pgId)) {
@@ -112,7 +158,7 @@ export default function HomeScreen({ navigation }) {
     } catch (err) {
       console.log('Wishlist error:', err);
     }
-  };
+  }, [addToWishlist, isWishlisted, removeFromWishlist]);
 
   const handleSearchPress = useCallback(() => {
     // Animate press feedback
@@ -121,9 +167,24 @@ export default function HomeScreen({ navigation }) {
       searchBarScale.value = withSpring(1, { damping: 15, stiffness: 400 });
       navigation.navigate('SearchDedicated');
     }, 80);
-  }, [navigation]);
+  }, [navigation, searchBarScale]);
 
-  const activeFiltersCount = Object.keys(filters).length;
+  const handleSelectCity = useCallback((city) => {
+    if (city === selectedCity) return;
+    Haptics.selectionAsync();
+    setSelectedCity(city);
+  }, [selectedCity]);
+
+  const wishlistIds = useMemo(() => new Set(
+    wishlist.map((item) => item.pg?._id || item.pg).filter(Boolean)
+  ), [wishlist]);
+
+  const activeFiltersCount = useMemo(() => (
+    Object.values(filters).filter((value) => {
+      if (Array.isArray(value)) return value.length > 0;
+      return value !== undefined && value !== null && value !== '';
+    }).length
+  ), [filters]);
 
   // ─── Animated Styles ──────────────────────────────────────────────
 
@@ -176,7 +237,7 @@ export default function HomeScreen({ navigation }) {
     const height = interpolate(
       scrollY.value,
       [0, SEARCH_BAR_COLLAPSE_END],
-      [44, 0],
+      [46, 0],
       Extrapolation.CLAMP
     );
 
@@ -194,7 +255,7 @@ export default function HomeScreen({ navigation }) {
     const translateY = interpolate(
       scrollY.value,
       [0, HEADER_SCROLL_DISTANCE],
-      [0, -45], // Move up to cover the fading greeting row
+      [0, -39],
       Extrapolation.CLAMP
     );
 
@@ -228,7 +289,7 @@ export default function HomeScreen({ navigation }) {
         onAction={() => activeFiltersCount > 0 ? clearFilters() : navigation.navigate('SearchDedicated')}
       />
     </View>
-  ), [selectedCity, activeFiltersCount, navigation]);
+  ), [selectedCity, activeFiltersCount, clearFilters, navigation]);
 
   const ListFooter = useMemo(() => (
     <TouchableOpacity style={styles.aiBanner} onPress={() => navigation.navigate('AIChat')} activeOpacity={0.9}>
@@ -247,7 +308,7 @@ export default function HomeScreen({ navigation }) {
         <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
       </LinearGradient>
     </TouchableOpacity>
-  ), []);
+  ), [navigation]);
 
   const EmptyComponent = useMemo(() => (
     <View style={styles.empty}>
@@ -268,18 +329,13 @@ export default function HomeScreen({ navigation }) {
   ), []);
 
   const renderPGCard = useCallback(({ item: pg }) => (
-    <PGCard
+    <PGListCard
       pg={pg}
+      isFavorite={wishlistIds.has(pg._id)}
       onPress={() => navigation.navigate('PGDetail', { pgId: pg._id })}
-      style={{ marginBottom: 16 }}
-      rightAction={
-        <WishlistButton
-          isWishlisted={isWishlisted(pg._id)}
-          onPress={() => toggleWishlist(pg._id)}
-        />
-      }
+      onWishlistPress={() => toggleWishlist(pg._id)}
     />
-  ), [isWishlisted, wishlist]);
+  ), [navigation, toggleWishlist, wishlistIds]);
 
   const keyExtractor = useCallback((item) => item._id, []);
 
@@ -341,31 +397,11 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* City Selector Chips */}
-          <Animated.View style={cityChipsAnimatedStyle}>
-            <Animated.ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.cityScroll}
-            >
-              {CITIES.map((city) => (
-                <TouchableOpacity
-                  key={city}
-                  style={[styles.cityChip, selectedCity === city && styles.cityChipActive]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSelectedCity(city);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="location" size={12} color={selectedCity === city ? colors.primary : '#fff'} />
-                  <Text style={[styles.cityText, selectedCity === city && styles.cityTextActive]}>
-                    {city}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </Animated.ScrollView>
-          </Animated.View>
+          <CitySelector
+            selectedCity={selectedCity}
+            onSelectCity={handleSelectCity}
+            animatedStyle={cityChipsAnimatedStyle}
+          />
         </LinearGradient>
       </Animated.View>
 
@@ -421,13 +457,13 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.screenPadding, paddingBottom: 10, paddingTop: 8,
+    paddingHorizontal: spacing.screenPadding, paddingBottom: 12, paddingTop: 10,
   },
   greeting: { fontSize: 17, fontWeight: '800', color: '#fff' },
-  subGreeting: { fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  subGreeting: { fontSize: 12, color: 'rgba(255,255,255,0.72)', marginTop: 2, fontWeight: '500' },
 
   // Search Bar (Pressable Fake)
-  searchContainer: { paddingHorizontal: spacing.screenPadding, paddingBottom: 12 },
+  searchContainer: { paddingHorizontal: spacing.screenPadding, paddingBottom: 10 },
   fakeSearchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -438,11 +474,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: 24, // Pill shape
-    height: 38, // Redesigned height
-    paddingHorizontal: 12,
-    gap: 6, // Compact spacing
-    // Premium subtle shadow instead of border
+    borderRadius: 24,
+    height: 42,
+    paddingHorizontal: 14,
+    gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -453,14 +488,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textMuted,
     flex: 1,
+    fontWeight: '500',
   },
   filterBtn: {
-    width: 38, height: 38, // Redesigned height
-    borderRadius: 19, // Pill shape
+    width: 42, height: 42,
+    borderRadius: 21,
     backgroundColor: colors.surface,
     alignItems: 'center', justifyContent: 'center',
     position: 'relative',
-    // Premium subtle shadow instead of border
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -476,33 +511,63 @@ const styles = StyleSheet.create({
   filterBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
 
   // City Chips
-  cityScroll: { paddingHorizontal: spacing.screenPadding, paddingBottom: 12, gap: 10 },
-  cityChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingVertical: 6, paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+  citySelectorWrap: {
+    height: 46,
   },
-  cityChipActive: { backgroundColor: '#fff', borderColor: '#fff' },
-  cityText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  cityScroll: {
+    paddingHorizontal: spacing.screenPadding,
+    paddingBottom: 10,
+    gap: 8,
+    alignItems: 'center',
+  },
+  cityChip: {
+    minHeight: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 15,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+  cityChipActive: {
+    backgroundColor: '#fff',
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cityText: { color: 'rgba(255,255,255,0.86)', fontSize: 13, fontWeight: '700' },
   cityTextActive: { color: colors.primary },
 
   // Content
   list: { flex: 1 },
-  content: { padding: spacing.screenPadding, paddingBottom: 40 },
-  listHeader: { marginBottom: 4 },
+  content: { padding: spacing.screenPadding, paddingBottom: 44 },
+  listHeader: { marginBottom: 2 },
+  pgCardSpacing: { marginBottom: 16 },
 
   // Empty State
-  empty: { alignItems: 'center', paddingVertical: 48 },
+  empty: {
+    alignItems: 'center',
+    paddingVertical: 34,
+    paddingHorizontal: 24,
+    marginBottom: 12,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
   emptyIconWrapper: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: colors.surfaceAlt,
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: colors.searchBg,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 16,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.textPrimary, marginBottom: 6 },
-  emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center' },
+  emptyTitle: { fontSize: 17, fontWeight: '800', color: colors.textPrimary, marginBottom: 6 },
+  emptyText: { fontSize: 14, lineHeight: 20, color: colors.textMuted, textAlign: 'center' },
 
   // AI Banner
   aiBanner: {

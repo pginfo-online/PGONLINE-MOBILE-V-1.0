@@ -6,16 +6,16 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import colors from '../../theme/colors';
-import meetupService from '../../services/meetup.service';
+import { colors } from '../../theme/colors';
+import { meetupService } from '../../services/meetup.service';
 import { getMeetupCoverUrl, DEFAULT_MEETUP_IMAGE } from '../../utils/meetupHelpers';
 import { Skeleton } from '../ui/Skeleton';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CAROUSEL_ITEM_WIDTH = SCREEN_WIDTH - 56; // leaves a peek of the next card
-const CARD_GAP = 14;
-const CAROUSEL_HEIGHT = 188;
-const AUTO_PLAY_INTERVAL = 4000;
+const CAROUSEL_ITEM_WIDTH = SCREEN_WIDTH - 32;
+const CARD_GAP = 12;
+const CAROUSEL_HEIGHT = 204;
+const AUTO_PLAY_INTERVAL = 4500;
 
 const CATEGORY_COLORS = {
   career: { bg: '#e0f2fe', text: '#0369a1' },
@@ -27,30 +27,108 @@ const CATEGORY_COLORS = {
   other: { bg: '#f3f4f6', text: '#374151' },
 };
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return 'Date TBA';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return 'Date TBA';
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const MeetupCard = memo(function MeetupCard({ meetup, navigation }) {
+  const categoryStyle = CATEGORY_COLORS[meetup.category] || CATEGORY_COLORS.other;
+  const venue = meetup.location?.name || meetup.location?.city || 'PG Community';
+
+  return (
+    <TouchableOpacity
+      style={styles.cardContainer}
+      activeOpacity={0.94}
+      onPress={() => navigation.navigate('MeetupDetail', { meetupId: meetup._id })}
+      accessibilityRole="button"
+      accessibilityLabel={`${meetup.title}, ${formatDate(meetup.startDate)}`}
+    >
+      <Image
+        source={{ uri: getMeetupCoverUrl(meetup) || DEFAULT_MEETUP_IMAGE }}
+        style={styles.bannerImage}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+        transition={180}
+      />
+      <LinearGradient
+        colors={['rgba(5,8,22,0.08)', 'rgba(5,8,22,0.22)', 'rgba(5,8,22,0.92)']}
+        locations={[0, 0.45, 1]}
+        style={styles.gradientOverlay}
+      />
+
+      <View style={styles.cardHeader}>
+        <View style={[styles.categoryChip, { backgroundColor: categoryStyle.bg }]}>
+          <Text style={[styles.categoryText, { color: categoryStyle.text }]}>
+            {meetup.category ? meetup.category.toUpperCase() : 'EVENT'}
+          </Text>
+        </View>
+        <View style={styles.liveBadge}>
+          <Ionicons name="people" size={12} color="#fff" />
+        </View>
+      </View>
+
+      <View style={styles.cardContent}>
+        <View style={styles.datePill}>
+          <Ionicons name="calendar-outline" size={12} color="#bae6fd" />
+          <Text style={styles.dateText} numberOfLines={1}>
+            {formatDate(meetup.startDate)}
+          </Text>
+        </View>
+        <Text style={styles.titleText} numberOfLines={2}>
+          {meetup.title || 'Community meetup'}
+        </Text>
+        <View style={styles.locationRow}>
+          <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.78)" />
+          <Text style={styles.locationText} numberOfLines={1}>
+            {venue}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
 function MeetupsCarousel({ navigation }) {
   const [meetups, setMeetups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const flatListRef = useRef(null);
   const autoPlayTimerRef = useRef(null);
   const isUserInteractingRef = useRef(false);
+  const hasContentRef = useRef(false);
 
-  const fetchUpcomingMeetups = async () => {
+  const fetchUpcomingMeetups = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasContentRef.current) setLoading(true);
+      setError(null);
       const data = await meetupService.getUpcoming();
-      setMeetups(data || []);
+      const safeData = data || [];
+      hasContentRef.current = safeData.length > 0;
+      setMeetups(safeData);
+      setActiveIndex(0);
     } catch (err) {
       console.log('Error fetching upcoming meetups for carousel:', err);
+      setError(err);
+      if (!hasContentRef.current) setMeetups([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchUpcomingMeetups();
-  }, []);
+  }, [fetchUpcomingMeetups]);
 
   const stopAutoPlay = useCallback(() => {
     if (autoPlayTimerRef.current) {
@@ -82,10 +160,10 @@ function MeetupsCarousel({ navigation }) {
     return () => stopAutoPlay();
   }, [startAutoPlay, stopAutoPlay]);
 
-  const handleScroll = useCallback((event) => {
+  const handleMomentumScrollEnd = useCallback((event) => {
     const offsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / (CAROUSEL_ITEM_WIDTH + CARD_GAP));
-    setActiveIndex(index);
+    const nextIndex = Math.round(offsetX / (CAROUSEL_ITEM_WIDTH + CARD_GAP));
+    setActiveIndex((currentIndex) => (currentIndex === nextIndex ? currentIndex : nextIndex));
   }, []);
 
   const handleScrollBeginDrag = useCallback(() => {
@@ -98,72 +176,9 @@ function MeetupsCarousel({ navigation }) {
     startAutoPlay();
   }, [startAutoPlay]);
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const renderItem = useCallback(({ item: meetup }) => {
-    const categoryStyle = CATEGORY_COLORS[meetup.category] || CATEGORY_COLORS.other;
-
-    return (
-      <TouchableOpacity
-        style={styles.cardContainer}
-        activeOpacity={0.95}
-        onPress={() => navigation.navigate('MeetupDetail', { meetupId: meetup._id })}
-        accessibilityRole="button"
-        accessibilityLabel={`${meetup.title}, ${formatDate(meetup.startDate)}`}
-      >
-        <Image
-          source={{ uri: getMeetupCoverUrl(meetup) || DEFAULT_MEETUP_IMAGE }}
-          style={styles.bannerImage}
-          contentFit="cover"
-          placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-          transition={250}
-        />
-        <LinearGradient
-          colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.92)']}
-          locations={[0, 0.45, 1]}
-          style={styles.gradientOverlay}
-        />
-
-        <View style={styles.cardHeader}>
-          <View style={[styles.categoryChip, { backgroundColor: categoryStyle.bg }]}>
-            <Text style={[styles.categoryText, { color: categoryStyle.text }]}>
-              {meetup.category ? meetup.category.toUpperCase() : 'EVENT'}
-            </Text>
-          </View>
-          <View style={styles.liveBadge}>
-            <Ionicons name="people" size={11} color="#fff" />
-          </View>
-        </View>
-
-        <View style={styles.cardContent}>
-          <View style={styles.dateRow}>
-            <Ionicons name="calendar-outline" size={12} color="#38bdf8" />
-            <Text style={styles.dateText} numberOfLines={1}>
-              {formatDate(meetup.startDate)}
-            </Text>
-          </View>
-          <Text style={styles.titleText} numberOfLines={2}>
-            {meetup.title}
-          </Text>
-          <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.75)" />
-            <Text style={styles.locationText} numberOfLines={1}>
-              {meetup.location?.name || meetup.location?.city || 'PG Community'}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [navigation]);
+  const renderItem = useCallback(({ item: meetup }) => (
+    <MeetupCard meetup={meetup} navigation={navigation} />
+  ), [navigation]);
 
   const keyExtractor = useCallback((item) => item._id, []);
 
@@ -173,6 +188,8 @@ function MeetupsCarousel({ navigation }) {
     index,
   }), []);
 
+  const sectionTitle = 'Upcoming Meetups';
+
   if (loading) {
     return (
       <View style={styles.skeletonContainer}>
@@ -180,20 +197,42 @@ function MeetupsCarousel({ navigation }) {
           <Skeleton width="44%" height={20} borderRadius={6} />
           <Skeleton width="22%" height={16} borderRadius={6} />
         </View>
-        <Skeleton width={CAROUSEL_ITEM_WIDTH} height={CAROUSEL_HEIGHT} borderRadius={20} style={{ marginLeft: 20 }} />
+        <Skeleton width={CAROUSEL_ITEM_WIDTH} height={CAROUSEL_HEIGHT} borderRadius={18} style={{ marginLeft: 16 }} />
       </View>
     );
   }
 
-  if (meetups.length === 0) {
-    return null; // Don't show carousel if no upcoming meetups
+  if (!loading && meetups.length === 0) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+            <Text style={styles.sectionSubtitle}>Connect with your community</Text>
+          </View>
+        </View>
+        <View style={styles.emptyState}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name={error ? 'cloud-offline-outline' : 'calendar-clear-outline'} size={22} color={colors.primary} />
+          </View>
+          <View style={styles.emptyCopy}>
+            <Text style={styles.emptyTitle}>
+              {error ? 'Meetups could not load' : 'No meetups scheduled'}
+            </Text>
+            <Text style={styles.emptyText} numberOfLines={2}>
+              {error ? 'Pull to refresh or try again later.' : 'New community events will appear here when available.'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
   }
 
   return (
     <View style={styles.container}>
       <View style={styles.sectionHeader}>
         <View>
-          <Text style={styles.sectionTitle}>Upcoming Meetups</Text>
+          <Text style={styles.sectionTitle}>{sectionTitle}</Text>
           <Text style={styles.sectionSubtitle}>Connect with your community</Text>
         </View>
         <TouchableOpacity
@@ -206,47 +245,53 @@ function MeetupsCarousel({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        ref={flatListRef}
-        data={meetups}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={CAROUSEL_ITEM_WIDTH + CARD_GAP}
-        decelerationRate="fast"
-        contentContainerStyle={styles.listContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        onScrollBeginDrag={handleScrollBeginDrag}
-        onScrollEndDrag={handleScrollEndDrag}
-        getItemLayout={getItemLayout}
-        bounces={false}
-        removeClippedSubviews={Platform.OS !== 'web'}
-        initialNumToRender={3}
-        windowSize={3}
-      />
+      <View style={styles.carouselFrame}>
+        <FlatList
+          ref={flatListRef}
+          data={meetups}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={CAROUSEL_ITEM_WIDTH + CARD_GAP}
+          decelerationRate="fast"
+          disableIntervalMomentum
+          contentContainerStyle={styles.listContent}
+          onMomentumScrollEnd={handleMomentumScrollEnd}
+          scrollEventThrottle={32}
+          onScrollBeginDrag={handleScrollBeginDrag}
+          onScrollEndDrag={handleScrollEndDrag}
+          getItemLayout={getItemLayout}
+          bounces={false}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          initialNumToRender={2}
+          maxToRenderPerBatch={2}
+          windowSize={3}
+        />
 
-      {meetups.length > 1 && (
-        <View style={styles.indicatorContainer}>
-          {meetups.map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.indicatorDot,
-                activeIndex === i ? styles.indicatorDotActive : null,
-              ]}
-            />
-          ))}
-        </View>
-      )}
+        {meetups.length > 1 && (
+          <View style={styles.indicatorContainer} pointerEvents="none">
+            {meetups.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.indicatorDot,
+                  activeIndex === i ? styles.indicatorDotActive : null,
+                ]}
+              />
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 16,
+    marginTop: 8,
+    marginBottom: 18,
+    marginHorizontal: -20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -259,7 +304,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: colors.textPrimary,
-    letterSpacing: 0.1,
+    letterSpacing: 0,
   },
   sectionSubtitle: {
     fontSize: 12.5,
@@ -278,22 +323,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
   },
+  carouselFrame: {
+    position: 'relative',
+  },
   listContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     gap: CARD_GAP,
   },
   cardContainer: {
     width: CAROUSEL_ITEM_WIDTH,
     height: CAROUSEL_HEIGHT,
-    borderRadius: 20,
+    borderRadius: 18,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#000',
-    elevation: 5,
+    elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
   },
   bannerImage: {
     width: '100%',
@@ -305,9 +353,9 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     position: 'absolute',
-    top: 14,
-    left: 14,
-    right: 14,
+    top: 12,
+    left: 12,
+    right: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -315,7 +363,7 @@ const styles = StyleSheet.create({
   categoryChip: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
+    borderRadius: 999,
   },
   categoryText: {
     fontSize: 9,
@@ -323,31 +371,40 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   liveBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
   cardContent: {
     position: 'absolute',
-    bottom: 14,
-    left: 14,
-    right: 14,
-    gap: 5,
+    bottom: 16,
+    left: 16,
+    right: 16,
+    gap: 7,
   },
-  dateRow: {
+  datePill: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(14,165,233,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(186,230,253,0.18)',
   },
   dateText: {
-    color: '#38bdf8',
+    color: '#e0f2fe',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0,
   },
   titleText: {
     color: '#ffffff',
@@ -363,14 +420,14 @@ const styles = StyleSheet.create({
   locationText: {
     color: 'rgba(255,255,255,0.78)',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
     flexShrink: 1,
   },
   indicatorContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 10,
     gap: 6,
   },
   indicatorDot: {
@@ -380,17 +437,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#d1d5db',
   },
   indicatorDotActive: {
-    width: 16,
+    width: 18,
     backgroundColor: colors.primary,
   },
   skeletonContainer: {
-    marginVertical: 16,
+    marginTop: 8,
+    marginBottom: 18,
+    marginHorizontal: -20,
     gap: 10,
   },
   skeletonHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+  },
+  emptyState: {
+    marginHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  emptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.infoBg,
+  },
+  emptyCopy: {
+    flex: 1,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  emptyText: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: colors.textMuted,
+    marginTop: 2,
   },
 });
 

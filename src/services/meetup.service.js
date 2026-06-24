@@ -5,8 +5,8 @@ export const meetupService = {
     const res = await api.get('/meetups', { params });
     return { meetups: res.data.data, pagination: res.data.pagination };
   },
-  getUpcoming: async () => {
-    const res = await api.get('/meetups/upcoming');
+  getUpcoming: async (params = {}) => {
+    const res = await api.get('/meetups/upcoming', { params });
     return res.data.data.meetups;
   },
   getById: async (id) => {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import colors from '../../theme/colors';
+import { colors } from '../../theme/colors';
 
 /**
  * Suggestion item for the search dropdown
@@ -25,7 +25,7 @@ export default function SearchSuggestionItem({ item, onPress, onFill }) {
       </View>
       {onFill && (
         <TouchableOpacity style={styles.fillButton} onPress={() => onFill(item.text)}>
-          <Ionicons name="arrow-up-left" size={20} color={colors.textMuted} />
+          <Ionicons name="return-up-back-outline" size={20} color={colors.textMuted} />
         </TouchableOpacity>
       )}
     </TouchableOpacity>
