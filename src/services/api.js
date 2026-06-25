@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://pgonline-backend-v-1-0.onrender.com/api/v1';
+const API_BASE = 'https://pgonline-backend-v-1-0.onrender.com/api/v1' ||  process.env.EXPO_PUBLIC_API_URL || 'https://pgonline-backend-v-1-0.onrender.com/api/v1';
 
 
 const api = axios.create({
